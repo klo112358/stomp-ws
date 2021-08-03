@@ -115,7 +115,7 @@
           "named": "never",
           "asyncArrow": "always"
         }],
-        "@typescript-eslint/no-explicit-any": ["error"],
+        "@typescript-eslint/no-explicit-any": ["off"],
         "@typescript-eslint/member-delimiter-style": ["error", {
           "multiline": {
             "delimiter": "none"
@@ -136,7 +136,7 @@
           "allowSingleExtends": true
         }],
         "no-empty-function": ["off"],
-        "@typescript-eslint/no-empty-function": ["error", { "allow": ["constructors", "arrowFunctions"] }],
+        "@typescript-eslint/no-empty-function": ["off"],
         "@typescript-eslint/promise-function-async": ["error"],
         "@typescript-eslint/ban-tslint-comment": ["error"],
         "@typescript-eslint/consistent-type-definitions": ["off"],

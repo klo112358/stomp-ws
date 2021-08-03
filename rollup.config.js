@@ -2,6 +2,12 @@ import typescript from "@rollup/plugin-typescript"
 import babel from "@rollup/plugin-babel"
 import { terser } from "rollup-plugin-terser"
 
+const targets = [
+  "last 2 chrome versions",
+  "last 2 firefox versions",
+  "last 2 safari versions",
+]
+
 export default [
   {
     input: "src/server/index.ts",
@@ -11,10 +17,12 @@ export default [
       sourcemap: true,
       exports: "default",
     },
+    external: ["ws"],
     plugins: [
       typescript({
         outDir: "dist/server",
         noEmit: true,
+        exclude: ["test/**"],
       }),
       babel({
         babelHelpers: "bundled",
@@ -23,6 +31,36 @@ export default [
           [
             "@babel/preset-env",
             {
+              targets: { node: "14" },
+              useBuiltIns: false,
+            },
+          ],
+        ],
+      }),
+    ],
+  },
+  {
+    input: "src/client/index.ts",
+    output: {
+      dir: "dist/client",
+      format: "cjs",
+      sourcemap: true,
+      exports: "default",
+    },
+    plugins: [
+      typescript({
+        outDir: "dist/client",
+        noEmit: true,
+        exclude: ["test/**"],
+      }),
+      babel({
+        babelHelpers: "bundled",
+        extensions: [".js", ".ts"],
+        presets: [
+          [
+            "@babel/preset-env",
+            {
+              targets: { node: "14" },
               useBuiltIns: false,
             },
           ],
@@ -40,7 +78,11 @@ export default [
       sourcemap: true,
     },
     plugins: [
-      typescript(),
+      typescript({
+        outDir: "dist/client",
+        noEmit: true,
+        exclude: ["test/**"],
+      }),
       babel({
         babelHelpers: "bundled",
         extensions: [".js", ".ts"],
@@ -48,6 +90,7 @@ export default [
           [
             "@babel/preset-env",
             {
+              targets,
               useBuiltIns: false,
             },
           ],
@@ -65,7 +108,9 @@ export default [
       sourcemap: true,
     },
     plugins: [
-      typescript(),
+      typescript({
+        exclude: ["test/**"],
+      }),
       babel({
         babelHelpers: "bundled",
         extensions: [".js", ".ts"],
@@ -73,6 +118,7 @@ export default [
           [
             "@babel/preset-env",
             {
+              targets,
               useBuiltIns: false,
             },
           ],
