@@ -7,9 +7,6 @@ export class MalformedFrameError extends Error {
   }
 }
 
-const EOL = "\n"
-const EOLCode = EOL.charCodeAt(0)
-
 const textDecoder = new TextDecoder()
 
 const textEncoder = new TextEncoder()
@@ -32,7 +29,7 @@ function unescape(str: string): string {
 
 export function encode(frame: Frame): Uint8Array {
   const { command, headers, body } = frame
-  let str = command + EOL
+  let str = command + "\n"
   if (headers) {
     for (const key in headers) {
       if (Object.prototype.hasOwnProperty.call(headers, key)) {
@@ -40,20 +37,20 @@ export function encode(frame: Frame): Uint8Array {
           escape(key) +
           ":" +
           escape((headers as Record<string, string>)[key]) +
-          EOL
+          "\n"
       }
     }
   }
   if (body) {
     const length = body.length
-    const s = textEncoder.encode(str + "content-length:" + length + EOL + EOL)
+    const s = textEncoder.encode(str + "content-length:" + length + "\n\n")
     const combined = new Uint8Array(s.length + length + 1)
     combined.set(s)
     combined.set(body, s.length)
     combined[s.length + length] = 0
     return combined
   } else {
-    return textEncoder.encode(str + EOL + "\0")
+    return textEncoder.encode(str + "\n\0")
   }
 }
 
@@ -70,14 +67,14 @@ export function decode(bytes: ArrayBuffer | string): GenericFrame {
   let cursor = 0
   function getLine() {
     let index = cursor
-    while (index < buffer.length && buffer[index] !== EOLCode) {
+    while (index < buffer.length && buffer[index] !== 10) {
       index += 1
     }
     if (index >= buffer.length) {
       return textDecoder.decode(buffer.slice(cursor))
     }
     const line = textDecoder.decode(buffer.slice(cursor, index))
-    cursor = index + EOL.length
+    cursor = index + 1
     return line
   }
 
@@ -154,6 +151,10 @@ export function verifyClient(frame: GenericFrame): frame is ClientFrame {
       ["accept-version", "host"],
       ["login", "passcode", "heart-beat"],
     )
+    const heartBeat = frame.headers && frame.headers["heart-beat"]
+    if (heartBeat && !/^\d+,\d+$/.test(heartBeat)) {
+      throw new MalformedFrameError("Malformed heart-beat option.")
+    }
   } else if (command === "SEND") {
     verifyHeader(frame, ["destination"], true)
   } else if (command === "SUBSCRIBE") {
@@ -194,6 +195,10 @@ export function verifyServer(frame: GenericFrame): frame is ServerFrame {
   if (command === "CONNECTED") {
     noBody(frame)
     verifyHeader(frame, ["version"], ["session", "server", "heart-beat"])
+    const heartBeat = frame.headers && frame.headers["heart-beat"]
+    if (heartBeat && !/^\d+,\d+$/.test(heartBeat)) {
+      throw new MalformedFrameError("Malformed heart-beat option.")
+    }
   } else if (command === "MESSAGE") {
     verifyHeader(frame, ["destination"], true)
   } else if (command === "RECEIPT") {

@@ -32,6 +32,8 @@ type Listener = (frame: ServerFrame) => boolean | Promise<boolean>
 class Connection {
   private ws?: WebSocket
   private _connected: boolean = false
+  private _lastSend: number = 0
+  private _lastRecv: number = 0
 
   constructor(readonly url: string, readonly options?: Options) {}
 
@@ -40,6 +42,7 @@ class Connection {
     if (!socket) {
       return
     }
+    this._lastSend = Date.now()
     socket.send(encode(frame))
   }
 
@@ -53,29 +56,34 @@ class Connection {
       const onclose = () => {
         reject(new Error("Socket closed."))
       }
-      socket.addEventListener("close", onclose)
-      socket.addEventListener("message", (data) => {
+      const onmessage = (ev: MessageEvent) => {
         try {
-          const frame = toServerFrame(data as any)
+          const frame = toServerFrame(ev.data)
           if (!frame) {
             return
           }
           Promise.resolve(fn(frame))
             .then((processed) => {
               if (processed) {
-                socket.removeEventListener("close", onclose)
+                off()
                 resolve(frame)
               }
             })
             .catch((err) => {
-              socket.removeEventListener("close", onclose)
+              off()
               reject(err)
             })
         } catch (err) {
-          socket.removeEventListener("close", onclose)
+          off()
           reject(err)
         }
-      })
+      }
+      const off = () => {
+        socket.removeEventListener("close", onclose)
+        socket.removeEventListener("message", onmessage)
+      }
+      socket.addEventListener("close", onclose)
+      socket.addEventListener("message", onmessage)
     })
   }
 
@@ -98,10 +106,51 @@ class Connection {
     const url = new URL(this.url)
     return url.host
   }
+
   private handleError(frame: ServerFrame | null) {
     if (frame?.command === "ERROR") {
       this.ws?.close()
       throw new Error(frame.headers.message)
+    }
+  }
+
+  private heartBeat(ws: WebSocket, heartBeat: string) {
+    const parts = heartBeat.split(",")
+    const sx = parseInt(parts[0], 10)
+    const sy = parseInt(parts[1], 10)
+    const cx = this.options?.clientHeartBeat || 0
+    const cy = this.options?.serverHeartBeat || 0
+
+    const clientHeartBeat = cx && sy ? Math.max(cx, sy) : 0
+    const serverHeartBeat = sx && cy ? Math.max(sx, cy) : 0
+
+    if (clientHeartBeat) {
+      const interval = setInterval(() => {
+        if (Date.now() - this._lastSend > clientHeartBeat / 2) {
+          this._lastSend = Date.now()
+          ws.send("\n")
+        }
+      }, clientHeartBeat / 2)
+
+      ws.addEventListener("close", () => {
+        clearInterval(interval)
+      })
+    }
+
+    if (serverHeartBeat) {
+      const interval = setInterval(() => {
+        if (Date.now() - this._lastRecv > serverHeartBeat * 1.5) {
+          ws.close()
+        }
+      }, serverHeartBeat)
+
+      ws.addEventListener("message", () => {
+        this._lastRecv = Date.now()
+      })
+
+      ws.addEventListener("close", () => {
+        clearInterval(interval)
+      })
     }
   }
 
@@ -128,6 +177,8 @@ class Connection {
               throw new Error("Expect CONNECTED frame. Got " + frame.command)
             }
             this._connected = true
+            this._lastRecv = Date.now()
+            this.heartBeat(ws, frame.headers["heart-beat"] || "0,0")
             resolve()
           } catch (e) {
             console.error(e)
@@ -139,12 +190,16 @@ class Connection {
         ws.addEventListener("message", onmessage)
 
         const send = () => {
+          this._lastSend = Date.now()
+          const cx = this.options?.clientHeartBeat || 0
+          const cy = this.options?.serverHeartBeat || 0
           ws.send(
             encode({
               command: "CONNECT",
               headers: {
                 "accept-version": "1.2",
                 host: this.host,
+                "heart-beat": `${cx},${cy}`,
               },
             }),
           )
@@ -156,11 +211,13 @@ class Connection {
           ws.onopen = send
         }
 
-        ws.onclose = () => {
+        ws.addEventListener("close", () => {
           this.ws = undefined
           this._connected = false
-          this.connect()
-        }
+          setTimeout(() => {
+            this.connect()
+          }, 500)
+        })
       })
     }
   }

@@ -1,4 +1,4 @@
-const Server = require("./dist/server/index")
+const Server = require("../dist/server/index")
 const express = require("express")
 const http = require("http")
 const cors = require("cors")
@@ -11,6 +11,8 @@ const server = http.createServer(app)
 const wss = new Server({
   server: server,
   path: "/ws",
+  clientHeartBeat: 2000,
+  serverHeartBeat: 2000,
   getSession: (frame) => {
     return "1"
   },
